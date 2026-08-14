@@ -1,0 +1,155 @@
+---
+- name: Deploy Apache Web Server with Nginx Reverse Proxy
+  hosts: webservers
+  become: yes
+
+  handlers:
+
+    - name: reload apache2
+      service:
+        name: apache2
+        state: reloaded
+
+    - name: reload nginx
+      service:
+        name: nginx
+        state: reloaded
+
+  tasks:
+
+    # =========================
+    # APACHE
+    # =========================
+
+    - name: Install Apache
+      apt:
+        name: apache2
+        state: present
+        update_cache: yes
+
+    - name: Disable default Apache site
+      command: a2dissite 000-default
+      changed_when: true
+      notify: reload apache2
+
+    - name: Create Apache ports configuration
+      copy:
+        dest: /etc/apache2/ports.conf
+        content: |
+          Listen 127.0.0.1:8080
+
+          <IfModule ssl_module>
+            Listen 443
+          </IfModule>
+
+          <IfModule mod_gnutls.c>
+            Listen 443
+          </IfModule>
+        owner: root
+        group: root
+        mode: '0644'
+      notify: reload apache2
+
+    - name: Create Apache virtual host on 127.0.0.1:8080
+      copy:
+        dest: /etc/apache2/sites-available/000-default.conf
+        content: |
+          <VirtualHost 127.0.0.1:8080>
+              ServerAdmin webmaster@localhost
+              DocumentRoot /var/www/html
+
+              ErrorLog ${APACHE_LOG_DIR}/error.log
+              CustomLog ${APACHE_LOG_DIR}/access.log combined
+          </VirtualHost>
+        owner: root
+        group: root
+        mode: '0644'
+      notify: reload apache2
+
+    - name: Create Apache index page
+      copy:
+        content: "<h1>Apache deployed successfully by Ansible</h1>"
+        dest: /var/www/html/index.html
+        owner: www-data
+        group: www-data
+        mode: '0644'
+
+    - name: Start and enable Apache
+      service:
+        name: apache2
+        state: started
+        enabled: yes
+
+    - name: Validate Apache configuration
+      command: apache2ctl configtest
+      changed_when: false
+
+    - name: Flush Apache handlers before Nginx setup
+      meta: flush_handlers
+
+    - name: Wait for Apache on 127.0.0.1:8080
+      wait_for:
+        host: 127.0.0.1
+        port: 8080
+        timeout: 10
+        state: started
+      when: not ansible_check_mode
+
+    # =========================
+    # NGINX
+    # =========================
+
+    - name: Install Nginx
+      apt:
+        name: nginx
+        state: present
+        update_cache: yes
+
+    - name: Remove default Nginx site
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      notify: reload nginx
+
+    - name: Create Nginx reverse proxy configuration
+      copy:
+        dest: /etc/nginx/sites-available/apache-proxy
+        content: |
+          server {
+              listen 80 default_server;
+              listen [::]:80 default_server;
+
+              server_name _;
+
+              location / {
+                  proxy_pass http://127.0.0.1:8080;
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $scheme;
+              }
+          }
+        owner: root
+        group: root
+        mode: '0644'
+      notify: reload nginx
+
+    - name: Enable Nginx reverse proxy site
+      file:
+        src: /etc/nginx/sites-available/apache-proxy
+        dest: /etc/nginx/sites-enabled/apache-proxy
+        state: link
+      notify: reload nginx
+
+    - name: Validate Nginx configuration
+      command: nginx -t
+      changed_when: false
+
+    - name: Start and enable Nginx
+      service:
+        name: nginx
+        state: started
+        enabled: yes
+
+    - name: Flush Nginx handlers
+      meta: flush_handlers

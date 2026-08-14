@@ -1,0 +1,98 @@
+---
+- name: Server Health Check
+  hosts: webservers
+  become: yes
+  gather_facts: no
+
+  tasks:
+
+    - name: Gather CPU usage percent
+      command: python3 -c "import os; stat=open('/proc/stat').readline().split(); idle=int(stat[4]); total=sum(map(int,stat[1:])); print(f'{(1-idle/total)*100:.1f}' if total>0 else '0')"
+      register: cpu_usage_raw
+      changed_when: false
+
+    - name: Gather RAM usage percent
+      command: python3 -c "import os; m=open('/proc/meminfo').read(); total=int([l for l in m.splitlines() if 'MemTotal' in l][0].split()[1]); avail=int([l for l in m.splitlines() if 'MemAvailable' in l][0].split()[1]); print(f'{(1-avail/total)*100:.1f}')"
+      register: ram_usage_raw
+      changed_when: false
+
+    - name: Gather disk usage percent for root filesystem
+      shell: df -P / | tail -1 | awk '{print $5}' | tr -d '%'
+      register: disk_usage_raw
+      changed_when: false
+
+    - name: Gather load average
+      command: cat /proc/loadavg
+      register: load_avg_raw
+      changed_when: false
+
+    - name: Gather uptime in seconds
+      command: cat /proc/uptime
+      register: uptime_raw
+      changed_when: false
+
+    - name: Check Apache service state
+      command: systemctl is-active apache2
+      register: apache_state_raw
+      changed_when: false
+      failed_when: false
+
+    - name: Check Nginx service state
+      command: systemctl is-active nginx
+      register: nginx_state_raw
+      changed_when: false
+      failed_when: false
+
+    - name: Check SSH service state
+      command: systemctl is-active ssh
+      register: ssh_state_raw
+      changed_when: false
+      failed_when: false
+
+    - name: Get listening TCP ports
+      command: ss -ltnp
+      register: tcp_ports_raw
+      changed_when: false
+
+    - name: Get default gateway
+      shell: ip route | grep default | awk '{print $3}'
+      register: gateway_ip
+      changed_when: false
+
+    - name: Check network connectivity to gateway
+      command: ping -c 1 -W 2 {{ gateway_ip.stdout }}
+      register: net_connectivity
+      changed_when: false
+      failed_when: false
+      when: gateway_ip.stdout | length > 0
+
+    - name: Check network connectivity to localhost fallback
+      command: ping -c 1 -W 2 127.0.0.1
+      register: net_connectivity
+      changed_when: false
+      failed_when: false
+      when: gateway_ip.stdout | length == 0
+
+    - name: Check Apache HTTP on 8080
+      uri:
+        url: http://127.0.0.1:8080
+        status_code: 200
+        timeout: 5
+      register: apache_http
+      changed_when: false
+      failed_when: false
+
+    - name: Check Nginx HTTP on 80
+      uri:
+        url: http://127.0.0.1:80
+        status_code: 200
+        timeout: 5
+      register: nginx_http
+      changed_when: false
+      failed_when: false
+
+    - name: Write health report JSON via Python
+      command: python3 -c "import json; print(json.dumps(__import__('collections').OrderedDict([('host','{{ inventory_hostname }}'),('timestamp','{{ lookup('pipe','date -u +%Y-%m-%dT%H:%M:%SZ') }}'),('checks',__import__('collections').OrderedDict([('cpu_usage_percent',{{ cpu_usage_raw.stdout | float }}),('ram_usage_percent',{{ ram_usage_raw.stdout | float }}),('disk_usage_percent',{{ disk_usage_raw.stdout | float }}),('load_avg',__import__('collections').OrderedDict([('1m',{{ load_avg_raw.stdout.split()[0] | float }}),('5m',{{ load_avg_raw.stdout.split()[1] | float }}),('15m',{{ load_avg_raw.stdout.split()[2] | float }}),('cores',{{ lookup('pipe','nproc') | int }})])),('uptime_seconds',{{ uptime_raw.stdout.split()[0] | float }}),('services',__import__('collections').OrderedDict([('apache2','{{ apache_state_raw.stdout }}'),('nginx','{{ nginx_state_raw.stdout }}'),('ssh','{{ ssh_state_raw.stdout }}')])),('tcp_ports',{{ tcp_ports_raw.stdout_lines | to_json }}),('network','{% if net_connectivity.rc is defined and net_connectivity.rc == 0 %}reachable{% else %}unreachable{% endif %}'),('http_apache_8080',{{ (apache_http.status | default(0)) | int }}),('http_nginx_80',{{ (nginx_http.status | default(0)) | int }})])))]))" > /tmp/health_raw_{{ inventory_hostname }}.json
+      args:
+        chdir: /
+      changed_when: false

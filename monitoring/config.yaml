@@ -1,0 +1,26 @@
+---
+# Health check configuration for ansible-web-deployment
+# Thresholds are evaluated in run_health.py and can be adjusted here.
+
+thresholds:
+  cpu:
+    warning: 80      # percent
+    critical: 95     # percent
+  ram:
+    warning: 80
+    critical: 95
+  disk:
+    warning: 80
+    critical: 95
+  load_avg:
+    multiplier: 2.0  # warning if 1min load > cpu_cores * multiplier
+  services:
+    critical: []     # service names that are always critical if down
+    warning: []      # service names that are warning if down
+  http:
+    ok: 200
+  network:
+    target: "127.0.0.1"
+
+output:
+  indent: 2

@@ -1,0 +1,30 @@
+# Secrets and environment
+.env
+telegram/.env
+.hermes/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Generated reports and logs
+monitoring/reports/*.json
+monitoring/reports/*.log
+*.log
+
+# Backup and temp files
+*.bak
+*.bak-*
+*.before-nginx
+*.tmp
+*.swp
+*~
+
+# OS/editor junk
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

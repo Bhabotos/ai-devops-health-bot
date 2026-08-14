@@ -1,0 +1,25 @@
+{
+  "host": "{{ inventory_hostname }}",
+  "timestamp": "{{ lookup('pipe','date -u +%Y-%m-%dT%H:%M:%SZ') }}",
+  "checks": {
+    "cpu_usage_percent": {{ cpu_usage_raw.stdout | float }},
+    "ram_usage_percent": {{ ram_usage_raw.stdout | float }},
+    "disk_usage_percent": {{ disk_usage_raw.stdout | float }},
+    "load_avg": {
+      "1m": {{ load_avg_raw.stdout.split()[0] | float }},
+      "5m": {{ load_avg_raw.stdout.split()[1] | float }},
+      "15m": {{ load_avg_raw.stdout.split()[2] | float }},
+      "cores": {{ lookup('pipe','nproc') | int }}
+    },
+    "uptime_seconds": {{ uptime_raw.stdout.split()[0] | float }},
+    "services": {
+      "apache2": "{{ apache_state_raw.stdout }}",
+      "nginx": "{{ nginx_state_raw.stdout }}",
+      "ssh": "{{ ssh_state_raw.stdout }}"
+    },
+    "tcp_ports": {{ tcp_ports_raw.stdout | tojson }},
+    "network": "{% if net_connectivity.rc is defined and net_connectivity.rc == 0 %}reachable{% else %}unreachable{% endif %}",
+    "http_apache_8080": {{ (apache_http.status | default(0)) | int }},
+    "http_nginx_80": {{ (nginx_http.status | default(0)) | int }}
+  }
+}

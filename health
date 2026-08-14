@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Local /health command for ansible-web-deployment
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec python3 "${SCRIPT_DIR}/monitoring/run_health.py" "$@"
