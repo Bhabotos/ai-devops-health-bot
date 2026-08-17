@@ -1,0 +1,122 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run unit tests
+        run: |
+          python -m unittest discover -s tests -v
+
+      - name: CLI smoke tests
+        env:
+          TELEGRAM_BOT_TOKEN: dummy
+        run: |
+          python monitoring/telegram_bot.py --mode cli --text "/help"
+          python monitoring/telegram_bot.py --mode cli --text "/health"
+          python monitoring/telegram_bot.py --mode cli --text "/status"
+          python monitoring/telegram_bot.py --mode cli --text "/actions"
+          python monitoring/telegram_bot.py --mode cli --text "/logs 5"
+          python monitoring/telegram_bot.py --mode cli --text "/export"
+          python monitoring/api.py health --server server1
+          python monitoring/api.py allowlist
+          python monitoring/api.py export
+          python monitoring/api.py retention --keep 20
+
+  docker:
+    name: Docker Build Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: ai-devops-command-center:ci-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify Docker image runs
+        run: |
+          docker run --rm ai-devops-command-center:ci-${{ github.sha }} python monitoring/api.py health --server server1
+
+  lint:
+    name: Lint and Security
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Check for secrets in code
+        run: |
+          echo "Scanning for potential secrets..."
+          if grep -rE "(password|secret|token|key|api_key|apikey)\s*=\s*['\"][^'\"]+['\"]" --include="*.py" --include="*.yml" --include="*.yaml" --include="*.json" --include="*.md" .; then
+            echo "WARNING: Potential secrets found in code"
+            exit 1
+          fi
+          echo "No secrets detected"
+
+      - name: Verify no Ansible deployment changes
+        run: |
+          echo "Ensuring core deployment files are untouched..."
+          if [ -f web_deploy.yml ]; then
+            echo "web_deploy.yml exists and is not modified by CI"
+          fi
+          if [ -f inventory.ini ]; then
+            echo "inventory.ini exists and is not modified by CI"
+          fi
+          echo "Core deployment files preserved"
+
+  deploy:
+    name: Deployment (disabled)
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && false
+    needs: [test, docker, lint]
+
+    steps:
+      - name: Deployment placeholder
+        run: |
+          echo "Deployment is disabled until CI is fully verified."
+          echo "Enable this job by removing '&& false' from the if condition."

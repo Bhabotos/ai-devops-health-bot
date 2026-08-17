@@ -1,0 +1,11 @@
+.git
+.gitignore
+.hermes
+.venv
+__pycache__
+*.pyc
+telegram
+tests
+monitoring/reports
+monitoring/templates
+.DS_Store

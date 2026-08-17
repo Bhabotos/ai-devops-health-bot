@@ -1,0 +1,14 @@
+services:
+  command-center:
+    build: .
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - HEALTH_BOT_LOG_LEVEL=${HEALTH_BOT_LOG_LEVEL:-INFO}
+    volumes:
+      - ./monitoring/reports:/app/monitoring/reports
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "monitoring/api.py", "health", "--server", "server1"]
+      interval: 1m
+      timeout: 10s
+      retries: 3
