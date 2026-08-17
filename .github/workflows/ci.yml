@@ -58,14 +58,8 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile
-          push: false
-          tags: ai-devops-command-center:ci-${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+        run: |
+          docker build -t ai-devops-command-center:ci-${{ github.sha }} .
 
       - name: Verify Docker image runs
         run: |
