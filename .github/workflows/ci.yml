@@ -69,15 +69,22 @@ jobs:
         run: |
           docker run --rm ai-devops-command-center:ci-${{ github.sha }} python monitoring/api.py allowlist
 
+      - name: Check for Docker Hub secrets
+        id: dockerhub
+        run: |
+          if [ -n "${{ secrets.DOCKERHUB_USERNAME }}" ] && [ -n "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
+            echo "present=true" >> $GITHUB_OUTPUT
+          fi
+
       - name: Log in to Docker Hub
-        if: github.event_name != 'pull_request' && secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != ''
+        if: steps.dockerhub.outputs.present == 'true'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Push Docker image to Docker Hub
-        if: github.event_name != 'pull_request' && secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != ''
+        if: steps.dockerhub.outputs.present == 'true'
         run: |
           docker tag ai-devops-command-center:ci-${{ github.sha }} ${{ secrets.DOCKERHUB_USERNAME }}/ai-devops-command-center:${{ github.sha }}
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/ai-devops-command-center:${{ github.sha }}
