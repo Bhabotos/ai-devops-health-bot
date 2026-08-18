@@ -106,3 +106,5 @@ Once the bot is running, send these commands from any Telegram client:
 
 - `DOCKERHUB_USERNAME`
 - `DOCKERHUB_TOKEN`
+
+Image push to Docker Hub is skipped automatically if either secret is missing, so PR builds on forks remain green.
