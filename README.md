@@ -95,3 +95,14 @@ Once the bot is running, send these commands from any Telegram client:
 - Never commit `telegram/.env`, `.venv/`, or backup files.
 - The bot loads the token at runtime from `telegram/.env`.
 - Sensitive strings are redacted in bot logs.
+
+## CI/CD
+
+- `docker` job builds the image locally and verifies API behavior inside the container.
+- On push to `main`, the workflow also tags and pushes to Docker Hub using GitHub Secrets.
+- Deployment stays disabled until you explicitly enable the `deploy` job.
+
+### Required secrets
+
+- `DOCKERHUB_USERNAME`
+- `DOCKERHUB_TOKEN`
