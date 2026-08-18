@@ -128,13 +128,125 @@ jobs:
           echo "Core deployment files preserved"
 
   deploy:
-    name: Deployment (disabled)
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && false
+    name: Deployment
+    runs-on: [self-hosted, linux]
+    if: github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
     needs: [test, docker, lint]
+    env:
+      KEY_PATH: ${{ github.workspace }}/deploy_key
 
     steps:
-      - name: Deployment placeholder
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Ansible
         run: |
-          echo "Deployment is disabled until CI is fully verified."
-          echo "Enable this job by removing '&& false' from the if condition."
+          python -m pip install --upgrade pip
+          pip install "ansible-core>=2.18,<3"
+
+      - name: Install SSH key
+        if: ${{ secrets.DEPLOY_SSH_KEY != '' }}
+        run: |
+          install -m 600 /dev/null "$KEY_PATH"
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > "$KEY_PATH"
+          echo "SSH key installed."
+
+      - name: Notify Telegram - Deployment started
+        if: success() && secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != ''
+        env:
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+            -d chat_id="${TG_CHAT}" \
+            --data-urlencode "text=🚀 Deployment started
+          Repository: ${{ github.repository }}
+          Branch: ${{ github.ref_name }}
+          Commit: ${{ github.sha }}
+          Status: DEPLOYMENT STARTED"
+
+      - name: Deploy web stack via Ansible
+        id: deploy
+        env:
+          ANSIBLE_PRIVATE_KEY_FILE: ${{ env.KEY_PATH }}
+          ANSIBLE_HOST_KEY_CHECKING: "False"
+        run: |
+          ansible-playbook -i inventory.ini web_deploy.yml -v
+
+      - name: Notify Telegram - Deployment successful
+        if: steps.deploy.outcome == 'success' && secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != ''
+        env:
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+            -d chat_id="${TG_CHAT}" \
+            --data-urlencode "text=✅ Deployment successful
+          Repository: ${{ github.repository }}
+          Branch: ${{ github.ref_name }}
+          Commit: ${{ github.sha }}
+          Status: DEPLOYMENT SUCCESSFUL"
+
+      - name: Notify Telegram - Deployment failed
+        if: steps.deploy.outcome == 'failure' && secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != ''
+        env:
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+            -d chat_id="${TG_CHAT}" \
+            --data-urlencode "text=❌ Deployment failed
+          Repository: ${{ github.repository }}
+          Branch: ${{ github.ref_name }}
+          Commit: ${{ github.sha }}
+          Status: DEPLOYMENT FAILED"
+
+      - name: Post-deploy health verification
+        id: health
+        if: steps.deploy.outcome == 'success'
+        env:
+          ANSIBLE_PRIVATE_KEY_FILE: ${{ env.KEY_PATH }}
+          ANSIBLE_HOST_KEY_CHECKING: "False"
+        run: |
+          ansible-playbook -i inventory.ini monitoring/health.yml
+
+      - name: Notify Telegram - Health check passed
+        if: steps.health.outcome == 'success' && secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != ''
+        env:
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+            -d chat_id="${TG_CHAT}" \
+            --data-urlencode "text=✅ Health check passed
+          Repository: ${{ github.repository }}
+          Branch: ${{ github.ref_name }}
+          Commit: ${{ github.sha }}
+          Deployment Status: SUCCESSFUL
+          Health Check Status: PASSED"
+
+      - name: Notify Telegram - Health check failed
+        if: steps.health.outcome == 'failure' && secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != ''
+        env:
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+            -d chat_id="${TG_CHAT}" \
+            --data-urlencode "text=❌ Health check failed
+          Repository: ${{ github.repository }}
+          Branch: ${{ github.ref_name }}
+          Commit: ${{ github.sha }}
+          Deployment Status: SUCCESSFUL
+          Health Check Status: FAILED"
+
+      - name: Cleanup SSH key
+        if: always()
+        run: |
+          rm -f "$KEY_PATH"
+          echo "SSH key removed."

@@ -98,13 +98,22 @@ Once the bot is running, send these commands from any Telegram client:
 
 ## CI/CD
 
+- `test` runs the unit and CLI smoke tests across Python 3.11/3.12/3.13.
 - `docker` job builds the image locally and verifies API behavior inside the container.
 - On push to `main`, the workflow also tags and pushes to Docker Hub using GitHub Secrets.
-- Deployment stays disabled until you explicitly enable the `deploy` job.
+- Deployment is gated by the `DEPLOY_ENABLED` workflow variable and runs on a
+  self-hosted runner (the target `server1` is a private RFC1918 address that a
+  GitHub-hosted runner cannot reach).
 
 ### Required secrets
 
 - `DOCKERHUB_USERNAME`
 - `DOCKERHUB_TOKEN`
+- `DEPLOY_SSH_KEY` — private SSH key for `bhabotos` on `server1`, used by the
+  `deploy` job. The deploy job fails if this is missing while `DEPLOY_ENABLED` is `true`.
+
+### Optional workflow variable
+
+- `DEPLOY_ENABLED`: set to `true` to allow the `deploy` job to run on `main`.
 
 Image push to Docker Hub is skipped automatically if either secret is missing, so PR builds on forks remain green.
