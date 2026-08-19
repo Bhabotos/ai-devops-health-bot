@@ -11,6 +11,9 @@ jobs:
     runs-on: [self-hosted, linux]
     env:
       KEY_PATH: ${{ github.workspace }}/monitor_key
+      TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
 
     steps:
       - name: Checkout
@@ -27,7 +30,7 @@ jobs:
           pip install "ansible-core>=2.18,<3"
 
       - name: Install SSH key
-        if: ${{ secrets.DEPLOY_SSH_KEY != '' }}
+        if: ${{ env.DEPLOY_SSH_KEY != '' }}
         run: |
           install -m 600 /dev/null "$KEY_PATH"
           echo "${{ secrets.DEPLOY_SSH_KEY }}" > "$KEY_PATH"
@@ -43,7 +46,7 @@ jobs:
           ansible-playbook -i inventory.ini monitoring/health.yml
 
       - name: Notify Telegram - Server/application unhealthy
-        if: steps.health.outcome == 'failure' && secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != ''
+        if: steps.health.outcome == 'failure' && env.TG_TOKEN != '' && env.TG_CHAT != ''
         env:
           TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}

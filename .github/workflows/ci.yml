@@ -134,6 +134,9 @@ jobs:
     needs: [test, docker, lint]
     env:
       KEY_PATH: ${{ github.workspace }}/deploy_key
+      TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
 
     steps:
       - name: Checkout
@@ -150,14 +153,14 @@ jobs:
           pip install "ansible-core>=2.18,<3"
 
       - name: Install SSH key
-        if: ${{ secrets.DEPLOY_SSH_KEY != '' }}
+        if: ${{ env.DEPLOY_SSH_KEY != '' }}
         run: |
           install -m 600 /dev/null "$KEY_PATH"
           echo "${{ secrets.DEPLOY_SSH_KEY }}" > "$KEY_PATH"
           echo "SSH key installed."
 
       - name: Notify Telegram - Deployment started
-        if: success() && secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != ''
+        if: success() && env.TG_TOKEN != '' && env.TG_CHAT != ''
         env:
           TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -179,7 +182,7 @@ jobs:
           ansible-playbook -i inventory.ini web_deploy.yml -v
 
       - name: Notify Telegram - Deployment successful
-        if: steps.deploy.outcome == 'success' && secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != ''
+        if: steps.deploy.outcome == 'success' && env.TG_TOKEN != '' && env.TG_CHAT != ''
         env:
           TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -193,7 +196,7 @@ jobs:
           Status: DEPLOYMENT SUCCESSFUL"
 
       - name: Notify Telegram - Deployment failed
-        if: steps.deploy.outcome == 'failure' && secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != ''
+        if: steps.deploy.outcome == 'failure' && env.TG_TOKEN != '' && env.TG_CHAT != ''
         env:
           TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -216,7 +219,7 @@ jobs:
           ansible-playbook -i inventory.ini monitoring/health.yml
 
       - name: Notify Telegram - Health check passed
-        if: steps.health.outcome == 'success' && secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != ''
+        if: steps.health.outcome == 'success' && env.TG_TOKEN != '' && env.TG_CHAT != ''
         env:
           TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -231,7 +234,7 @@ jobs:
           Health Check Status: PASSED"
 
       - name: Notify Telegram - Health check failed
-        if: steps.health.outcome == 'failure' && secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != ''
+        if: steps.health.outcome == 'failure' && env.TG_TOKEN != '' && env.TG_CHAT != ''
         env:
           TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -259,7 +262,7 @@ jobs:
       TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
     steps:
       - name: Notify
-        if: ${{ secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != '' }}
+        if: ${{ env.TG_TOKEN != '' && env.TG_CHAT != '' }}
         run: |
           curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
             -d chat_id="${TG_CHAT}" \
@@ -279,7 +282,7 @@ jobs:
       TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
     steps:
       - name: Notify
-        if: ${{ secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != '' }}
+        if: ${{ env.TG_TOKEN != '' && env.TG_CHAT != '' }}
         run: |
           curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
             -d chat_id="${TG_CHAT}" \
@@ -299,7 +302,7 @@ jobs:
       TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
     steps:
       - name: Notify
-        if: ${{ secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != '' }}
+        if: ${{ env.TG_TOKEN != '' && env.TG_CHAT != '' }}
         run: |
           curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
             -d chat_id="${TG_CHAT}" \
