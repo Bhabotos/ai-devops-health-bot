@@ -9,7 +9,6 @@ jobs:
   health-monitor:
     name: Server Health Monitor
     runs-on: [self-hosted, linux]
-    if: ${{ secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != '' }}
     env:
       KEY_PATH: ${{ github.workspace }}/monitor_key
 
