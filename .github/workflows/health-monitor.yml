@@ -1,0 +1,64 @@
+name: Health Monitor
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+jobs:
+  health-monitor:
+    name: Server Health Monitor
+    runs-on: [self-hosted, linux]
+    if: ${{ secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != '' }}
+    env:
+      KEY_PATH: ${{ github.workspace }}/monitor_key
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Ansible
+        run: |
+          python -m pip install --upgrade pip
+          pip install "ansible-core>=2.18,<3"
+
+      - name: Install SSH key
+        if: ${{ secrets.DEPLOY_SSH_KEY != '' }}
+        run: |
+          install -m 600 /dev/null "$KEY_PATH"
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > "$KEY_PATH"
+          echo "SSH key installed."
+
+      - name: Health check
+        id: health
+        continue-on-error: true
+        env:
+          ANSIBLE_PRIVATE_KEY_FILE: ${{ env.KEY_PATH }}
+          ANSIBLE_HOST_KEY_CHECKING: "False"
+        run: |
+          ansible-playbook -i inventory.ini monitoring/health.yml
+
+      - name: Notify Telegram - Server/application unhealthy
+        if: steps.health.outcome == 'failure' && secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != ''
+        env:
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+            -d chat_id="${TG_CHAT}" \
+            --data-urlencode "text=⚠️ Server/application is UNHEALTHY
+          Repository: ${{ github.repository }}
+          Server: server1
+          Commit: ${{ github.sha }}
+          Health Check Status: FAILED"
+
+      - name: Cleanup SSH key
+        if: always()
+        run: |
+          rm -f "$KEY_PATH"
+          echo "SSH key removed."
